@@ -42,7 +42,7 @@
 
 然后这会覆盖后面的stdout指针，导致崩溃。
 
-![alt](https://raw.githubusercontent.com/unamer/Writeups/master/ichunqiu-Final/2.jpg)
+![alt](https://raw.githubusercontent.com/unamer/Writeups/master/ichunqiu-Final/4.jpg)
 
 但是后面覆盖的内容不知道如何控制，栈内容不可控导致无法利用。如果有大神能利用求告知。
 
